@@ -1,0 +1,6 @@
+{
+  "name": "대외선교부 VIP 명단 관리 시스템",
+  "description": "대외선교부 및 IUBA 경상대센터를 위한 VIP 전도 명단 정리 및 관리 시스템. 연도별/분야별 조회 및 다양한 문서 포맷(Excel, Word, PDF) 내보내기 기능을 제공합니다.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
