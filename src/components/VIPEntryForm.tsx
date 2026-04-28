@@ -27,19 +27,30 @@ export default function VIPEntryForm({ onAddEntry, onComplete }: VIPEntryFormPro
     '정치·법조·공직·경찰'
   ];
 
+  const [successCount, setSuccessCount] = useState(0);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       await onAddEntry(formData);
-      onComplete();
+      setSuccessCount(prev => prev + 1);
+      setFormData(prev => ({
+        date: prev.date,
+        affiliation: prev.affiliation,
+        name: '',
+        position: '',
+        category: '금융·기업·단체' as VIPCategory,
+        contact: '',
+        progress: '',
+      }));
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
-
+  
   return (
     <div className="bg-white rounded-3xl border border-blue-50 p-10 shadow-[0_20px_50px_rgba(29,78,216,0.05)] max-w-3xl mx-auto">
       <div className="mb-10 border-b border-blue-50 pb-8">
@@ -153,13 +164,29 @@ export default function VIPEntryForm({ onAddEntry, onComplete }: VIPEntryFormPro
             />
         </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full p-5 bg-blue-700 text-white rounded-2xl font-black text-lg hover:bg-blue-800 transition-all flex items-center justify-center gap-4 disabled:opacity-50 mt-6 shadow-xl shadow-blue-200 uppercase tracking-widest"
-        >
-          {loading ? '기록 중...' : <><Send size={22} className="text-blue-200" /> 정보 등록하기</>}
-        </button>
+        {successCount > 0 && (
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-2xl px-5 py-3 text-blue-700 font-black text-sm">
+            <Send size={16} className="text-blue-400" />
+            {successCount}명 등록 완료 — 계속 입력하세요
+          </div>
+        )}
+
+        <div className="flex gap-3 mt-6">
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 p-5 bg-blue-700 text-white rounded-2xl font-black text-lg hover:bg-blue-800 transition-all flex items-center justify-center gap-4 disabled:opacity-50 shadow-xl shadow-blue-200 uppercase tracking-widest"
+          >
+            {loading ? '기록 중...' : <><Send size={22} className="text-blue-200" /> 등록하기</>}
+          </button>
+          <button
+            type="button"
+            onClick={onComplete}
+            className="px-6 p-5 bg-blue-50 text-blue-700 rounded-2xl font-black hover:bg-blue-100 transition-all border border-blue-100"
+          >
+            완료
+          </button>
+        </div>
       </form>
     </div>
   );
