@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { UserPlus, Shield, User, MapPin, Trash2, Key } from 'lucide-react';
+import { UserPlus, Shield, User, MapPin, Trash2, Key, Pencil, X } from 'lucide-react';
 import { UserProfile, Affiliation } from '../types';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -13,6 +13,8 @@ interface AdminPanelProps {
 export default function AdminPanel({ onAddUser, onDeleteUser }: AdminPanelProps) {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editForm, setEditForm] = useState({ role: 'user' as 'admin' | 'user', password: '' });
   const [formData, setFormData] = useState({
     name: '',
     affiliation: '대외선교부' as Affiliation,
@@ -66,7 +68,89 @@ export default function AdminPanel({ onAddUser, onDeleteUser }: AdminPanelProps)
     await fetchUsers();
   };
 
+  const handleEditUser = (user: UserProfile) => {
+    setEditingUser(user);
+    setEditForm({ role: user.role, password: '' });
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
+    const updates: any = { role: editForm.role };
+    if (editForm.password) {
+      updates.password = editForm.password;
+      updates.is_initial_password = false;
+    }
+    await supabase.from('system_users').update(updates).eq('id', editingUser.id);
+    setEditingUser(null);
+    await fetchUsers();
+  };
   return (
+    <div className="relative">
+    {/* Edit Modal */}
+    {editingUser && (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-black text-lg text-blue-950 uppercase tracking-tight">유저 정보 수정</h3>
+            <button onClick={() => setEditingUser(null)} className="p-2 hover:bg-blue-50 rounded-xl transition-all">
+              <X size={20} className="text-blue-300" />
+            </button>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest font-black text-blue-900/40 mb-1">이름</p>
+              <p className="font-black text-blue-950">{editingUser.name}</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase tracking-widest font-black text-blue-900/40">권한</label>
+              <div className="flex gap-2 bg-blue-50/50 p-1 rounded-xl border border-blue-100">
+                <button
+                  type="button"
+                  onClick={() => setEditForm({...editForm, role: 'user'})}
+                  className={cn(
+                    "flex-1 p-3 rounded-lg text-xs font-black uppercase tracking-wide transition-all flex items-center justify-center gap-2",
+                    editForm.role === 'user' ? "bg-blue-700 text-white" : "text-blue-600/40 hover:text-blue-600"
+                  )}
+                >
+                  <User size={14} /> 일반 유저
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditForm({...editForm, role: 'admin'})}
+                  className={cn(
+                    "flex-1 p-3 rounded-lg text-xs font-black uppercase tracking-wide transition-all flex items-center justify-center gap-2",
+                    editForm.role === 'admin' ? "bg-blue-700 text-white" : "text-blue-600/40 hover:text-blue-600"
+                  )}
+                >
+                  <Shield size={14} /> 관리자
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase tracking-widest font-black text-blue-900/40">새 비밀번호 (변경 시에만 입력)</label>
+              <input
+                type="password"
+                placeholder="비워두면 변경 안 됨"
+                value={editForm.password}
+                onChange={(e) => setEditForm({...editForm, password: e.target.value})}
+                className="w-full p-4 bg-blue-50/50 border border-blue-100 rounded-xl outline-none focus:border-blue-700 font-bold text-blue-900 placeholder:text-blue-200"
+              />
+            </div>
+
+            <button
+              onClick={handleUpdateUser}
+              className="w-full p-4 bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-800 transition-all"
+            >
+              수정 완료
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Add User Form */}
       <div className="bg-white rounded-3xl border border-blue-50 p-10 shadow-[0_15px_40px_rgba(29,78,216,0.04)]">
@@ -164,12 +248,20 @@ export default function AdminPanel({ onAddUser, onDeleteUser }: AdminPanelProps)
                     </div>
                     
                     {u.username !== '관리자' && (
-                        <button 
-                            onClick={() => handleDeleteUser(u.id)}
-                            className="p-3 text-blue-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
-                        >
-                            <Trash2 size={20} />
-                        </button>
+                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <button
+                                onClick={() => handleEditUser(u)}
+                                className="p-3 text-blue-300 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all"
+                            >
+                                <Pencil size={20} />
+                            </button>
+                            <button 
+                                onClick={() => handleDeleteUser(u.id)}
+                                className="p-3 text-blue-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                            >
+                                <Trash2 size={20} />
+                            </button>
+                        </div>
                     )}
                 </div>
             ))}
@@ -181,6 +273,7 @@ export default function AdminPanel({ onAddUser, onDeleteUser }: AdminPanelProps)
             )}
           </div>
       </div>
+    </div>
     </div>
   );
 }
