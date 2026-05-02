@@ -15,7 +15,8 @@ import {
   Sparkles,
   Pencil,
   X,
-  Save
+  Save,
+  Search
 } from 'lucide-react';
 import { VIPEntry, VIPCategory } from '../types';
 import { cn, formatDate } from '../lib/utils';
@@ -32,10 +33,25 @@ interface VIPListProps {
   canEdit: boolean;
 }
 
+// 검색 대상 필드에서 쿼리가 매칭되는지 확인 + 매칭된 텍스트 하이라이트용 헬퍼
+function highlight(text: string, query: string) {
+  if (!query) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-200 text-yellow-900 rounded px-0.5">{text.slice(idx, idx + query.length)}</mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
 export default function VIPList({ entries, onDelete, onUpdate, canEdit }: VIPListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [groupType, setGroupType] = useState<'yearly' | 'monthly' | 'category'>('yearly');
   const [filterValue, setFilterValue] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [editingEntry, setEditingEntry] = useState<VIPEntry | null>(null);
   const [editForm, setEditForm] = useState<Omit<VIPEntry, 'id' | 'created_at'>>({
     date: '',
@@ -51,17 +67,33 @@ export default function VIPList({ entries, onDelete, onUpdate, canEdit }: VIPLis
   const categories: VIPCategory[] = ['금융·기업·단체', '교육·문학·언론', '정치·법조·공직·경찰'];
 
   const groupedData = useMemo(() => {
-    const sorted = [...entries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    let sorted = [...entries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // 그룹/필터 적용
     if (filterValue !== 'all') {
-      if (groupType === 'yearly') return sorted.filter(e => new Date(e.date).getFullYear().toString() === filterValue);
-      if (groupType === 'monthly') return sorted.filter(e => {
+      if (groupType === 'yearly') sorted = sorted.filter(e => new Date(e.date).getFullYear().toString() === filterValue);
+      if (groupType === 'monthly') sorted = sorted.filter(e => {
         const d = new Date(e.date);
         return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}` === filterValue;
       });
-      if (groupType === 'category') return sorted.filter(e => e.category === filterValue);
+      if (groupType === 'category') sorted = sorted.filter(e => e.category === filterValue);
     }
+
+    // 검색어 적용 — 이름, 소속, 직책, 분야, 연락처, 진행도 전체 검색
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      sorted = sorted.filter(e =>
+        e.name.toLowerCase().includes(q) ||
+        e.affiliation.toLowerCase().includes(q) ||
+        e.position.toLowerCase().includes(q) ||
+        e.category.toLowerCase().includes(q) ||
+        e.contact.toLowerCase().includes(q) ||
+        e.progress.toLowerCase().includes(q)
+      );
+    }
+
     return sorted;
-  }, [entries, groupType, filterValue]);
+  }, [entries, groupType, filterValue, searchQuery]);
 
   const filterOptions = useMemo(() => {
     if (groupType === 'yearly') {
@@ -272,6 +304,26 @@ export default function VIPList({ entries, onDelete, onUpdate, canEdit }: VIPLis
         )}
       </AnimatePresence>
 
+      {/* Search Bar */}
+      <div className="relative">
+        <Search size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-300 pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="이름, 소속, 직책, 분야, 연락처, 진행도 통합 검색..."
+          className="w-full pl-12 pr-12 py-4 bg-white border border-blue-100 rounded-2xl outline-none focus:border-blue-700 focus:shadow-lg focus:shadow-blue-100 transition-all font-bold text-blue-900 placeholder:text-blue-200 shadow-sm text-sm"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 hover:bg-blue-50 rounded-lg transition-all"
+          >
+            <X size={16} className="text-blue-300" />
+          </button>
+        )}
+      </div>
+
       {/* List Header/Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl shadow-sm border border-blue-50">
         <div className="flex items-center gap-3 flex-wrap">
@@ -299,7 +351,12 @@ export default function VIPList({ entries, onDelete, onUpdate, canEdit }: VIPLis
             <option value="all">전체 명단 보기</option>
             {filterOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
-          <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-2 bg-blue-50 px-3 py-1.5 rounded-full">Total: {groupedData.length}</span>
+          <span className={cn(
+            "text-[10px] font-black uppercase tracking-widest ml-2 px-3 py-1.5 rounded-full transition-colors",
+            searchQuery ? "bg-yellow-100 text-yellow-700" : "bg-blue-50 text-blue-400"
+          )}>
+            {searchQuery ? `검색결과: ${groupedData.length}명` : `Total: ${groupedData.length}`}
+          </span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -330,17 +387,27 @@ export default function VIPList({ entries, onDelete, onUpdate, canEdit }: VIPLis
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-2">
-                  <h4 className="font-black text-blue-950 text-xl tracking-tight truncate">{entry.name}</h4>
-                  <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-wide border border-blue-100/50 whitespace-nowrap">{entry.position}</span>
+                  <h4 className="font-black text-blue-950 text-xl tracking-tight truncate">
+                    {highlight(entry.name, searchQuery)}
+                  </h4>
+                  <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-wide border border-blue-100/50 whitespace-nowrap">
+                    {highlight(entry.position, searchQuery)}
+                  </span>
                 </div>
                 <div className="flex items-center gap-5 text-[11px] text-blue-900/40 font-black uppercase tracking-wide">
-                  <span className="flex items-center gap-2 bg-blue-50/30 px-2 py-0.5 rounded-md"><User size={14} className="text-blue-300" /> {entry.affiliation}</span>
-                  <span className="flex items-center gap-2 bg-blue-50/30 px-2 py-0.5 rounded-md shrink-0"><Briefcase size={14} className="text-blue-300" /> {entry.category}</span>
+                  <span className="flex items-center gap-2 bg-blue-50/30 px-2 py-0.5 rounded-md">
+                    <User size={14} className="text-blue-300" />
+                    {highlight(entry.affiliation, searchQuery)}
+                  </span>
+                  <span className="flex items-center gap-2 bg-blue-50/30 px-2 py-0.5 rounded-md shrink-0">
+                    <Briefcase size={14} className="text-blue-300" />
+                    {highlight(entry.category, searchQuery)}
+                  </span>
                 </div>
               </div>
 
               <div className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-xs font-black tracking-wider shadow-inner">
-                {entry.contact}
+                {highlight(entry.contact, searchQuery)}
               </div>
 
               <div className="flex items-center gap-2">
@@ -382,7 +449,7 @@ export default function VIPList({ entries, onDelete, onUpdate, canEdit }: VIPLis
                     </div>
                     <p className="text-sm leading-relaxed whitespace-pre-wrap text-blue-950 font-bold bg-white p-8 rounded-2xl border border-blue-100 shadow-inner relative italic">
                       <Sparkles size={24} className="absolute -top-3 -left-3 text-blue-100" />
-                      {entry.progress}
+                      {highlight(entry.progress, searchQuery)}
                     </p>
                     <div className="mt-6 flex justify-end items-center gap-4">
                       <span className="w-full h-[1px] bg-blue-50" />
@@ -398,10 +465,22 @@ export default function VIPList({ entries, onDelete, onUpdate, canEdit }: VIPLis
         {groupedData.length === 0 && (
           <div className="py-24 text-center bg-white rounded-[2rem] border-2 border-dashed border-blue-100 shadow-inner">
             <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
-              <Users size={40} className="text-blue-200" />
+              {searchQuery ? <Search size={40} className="text-blue-200" /> : <Users size={40} className="text-blue-200" />}
             </div>
-            <p className="font-black text-2xl text-blue-900 tracking-tight">데이터가 없습니다.</p>
-            <p className="text-[10px] uppercase tracking-[0.3em] font-black text-blue-200 mt-4">Check filters or add new entries</p>
+            <p className="font-black text-2xl text-blue-900 tracking-tight">
+              {searchQuery ? `"${searchQuery}" 검색 결과가 없습니다.` : '데이터가 없습니다.'}
+            </p>
+            <p className="text-[10px] uppercase tracking-[0.3em] font-black text-blue-200 mt-4">
+              {searchQuery ? 'Try different keywords' : 'Check filters or add new entries'}
+            </p>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="mt-6 px-6 py-3 bg-blue-50 text-blue-700 rounded-2xl font-black text-xs hover:bg-blue-100 transition-all border border-blue-100"
+              >
+                검색 초기화
+              </button>
+            )}
           </div>
         )}
       </div>
