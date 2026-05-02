@@ -3,11 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect } from 'react';
 import { VIPEntry, UserProfile, LoginState, OutreachEvent } from './types';
 import Login from './components/Login';
@@ -22,9 +17,7 @@ export default function App() {
   const [events, setEvents] = useState<OutreachEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize System
   useEffect(() => {
-    // Load initial data
     const initialize = async () => {
       await fetchUsers();
       await fetchEvents();
@@ -40,7 +33,6 @@ export default function App() {
       if (data && data.length > 0) {
         localStorage.setItem('system_users', JSON.stringify(data));
       } else {
-        // Seed initial admin if not exists
         const savedUsers = localStorage.getItem('system_users');
         if (!savedUsers) {
           const initialUsers: UserProfile[] = [
@@ -48,7 +40,6 @@ export default function App() {
           ];
           localStorage.setItem('system_users', JSON.stringify(initialUsers));
           localStorage.setItem('pwd_관리자', '1925');
-          // Try to seed to Supabase
           await supabase.from('system_users').insert(initialUsers);
         }
       }
@@ -63,7 +54,6 @@ export default function App() {
         .from('outreach_events')
         .select('*')
         .order('date', { ascending: true });
-      
       if (error) throw error;
       if (data) setEvents(data);
       else {
@@ -83,7 +73,6 @@ export default function App() {
         .from('vip_list')
         .select('*')
         .order('created_at', { ascending: false });
-      
       if (error) throw error;
       if (data) setEntries(data);
       else {
@@ -99,18 +88,16 @@ export default function App() {
 
   const addEvent = async (eventData: Omit<OutreachEvent, 'id' | 'created_at'>) => {
     const newEvent: OutreachEvent = {
-        ...eventData,
-        id: Math.random().toString(36).substr(2, 9),
-        created_at: new Date().toISOString()
+      ...eventData,
+      id: Math.random().toString(36).substr(2, 9),
+      created_at: new Date().toISOString()
     };
-
     try {
       const { error } = await supabase.from('outreach_events').insert([newEvent]);
       if (error) throw error;
     } catch (err) {
       console.error('Supabase add event failed:', err);
     }
-
     const updated = [newEvent, ...events];
     setEvents(updated);
     localStorage.setItem('outreach_events', JSON.stringify(updated));
@@ -126,8 +113,19 @@ export default function App() {
     } catch (err) {
       console.error('Supabase update event failed:', err);
     }
-
     const updated = events.map(e => e.id === updatedEvent.id ? updatedEvent : e);
+    setEvents(updated);
+    localStorage.setItem('outreach_events', JSON.stringify(updated));
+  };
+
+  const deleteEvent = async (id: string) => {
+    try {
+      const { error } = await supabase.from('outreach_events').delete().eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      console.error('Supabase delete event failed:', err);
+    }
+    const updated = events.filter(e => e.id !== id);
     setEvents(updated);
     localStorage.setItem('outreach_events', JSON.stringify(updated));
   };
@@ -140,12 +138,10 @@ export default function App() {
       .eq('username', username)
       .eq('password', password)
       .single();
-
     if (error || !data) {
       setError('이름 또는 비밀번호가 올바르지 않습니다.');
       return;
     }
-
     setCurrentUser(data as UserProfile);
     setLoginState(data.is_initial_password ? LoginState.NEED_PASSWORD_CHANGE : LoginState.LOGGED_IN);
   };
@@ -161,21 +157,29 @@ export default function App() {
 
   const addEntry = async (entryData: Omit<VIPEntry, 'id' | 'created_at'>) => {
     const newEntry: VIPEntry = {
-        ...entryData,
-        id: Math.random().toString(36).substr(2, 9),
-        created_at: new Date().toISOString()
+      ...entryData,
+      id: Math.random().toString(36).substr(2, 9),
+      created_at: new Date().toISOString()
     };
-
     try {
       const { error } = await supabase.from('vip_list').insert([newEntry]);
       if (error) throw error;
     } catch (err) {
       console.error('Supabase add entry failed:', err);
     }
-
     const updated = [newEntry, ...entries];
     setEntries(updated);
     localStorage.setItem('vip_entries', JSON.stringify(updated));
+  };
+
+  const updateEntry = async (id: string, entryData: Omit<VIPEntry, 'id' | 'created_at'>) => {
+    try {
+      const { error } = await supabase.from('vip_list').update(entryData).eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      console.error('Supabase update entry failed:', err);
+    }
+    await fetchEntries();
   };
 
   const deleteEntry = async (id: string) => {
@@ -185,15 +189,9 @@ export default function App() {
     } catch (err) {
       console.error('Supabase delete entry failed:', err);
     }
-
     const updated = entries.filter(e => e.id !== id);
     setEntries(updated);
     localStorage.setItem('vip_entries', JSON.stringify(updated));
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setLoginState(LoginState.LOGGED_OUT);
   };
 
   const addUser = async (userData: Omit<UserProfile, 'id'>) => {
@@ -202,62 +200,43 @@ export default function App() {
       id: Math.random().toString(36).substr(2, 9),
       is_initial_password: true
     };
-    
     try {
-      const { error } = await supabase.from('system_users').insert([newUser]);
+      const { error } = await supabase.from('system_users').insert([{ ...newUser, password: '1234' }]);
       if (error) throw error;
-      // Also set initial password in local for fallback/demo simplicity if needed
-      localStorage.setItem(`pwd_${newUser.username}`, '1234');
     } catch (err) {
       console.error('Supabase add user failed:', err);
     }
-
     const savedUsers = JSON.parse(localStorage.getItem('system_users') || '[]');
-    const updated = [...savedUsers, newUser];
-    localStorage.setItem('system_users', JSON.stringify(updated));
-    // We don't have a users state in App.tsx currently, but we could add one if needed.
-    // For now, fetchUsers will refresh if we reload, or we can just rely on the component's internal fetch.
-  };
-
-  const deleteEvent = async (id: string) => {
-    try {
-      const { error } = await supabase.from('outreach_events').delete().eq('id', id);
-      if (error) throw error;
-    } catch (err) {
-      console.error('Supabase delete event failed:', err);
-    }
-    const updated = events.filter(e => e.id !== id);
-    setEvents(updated);
-    localStorage.setItem('outreach_events', JSON.stringify(updated));
+    localStorage.setItem('system_users', JSON.stringify([...savedUsers, newUser]));
   };
 
   const deleteUser = async (id: string) => {
-    try {
-      const { error } = await supabase.from('system_users').delete().eq('id', id);
-      if (error) throw error;
-    } catch (err) {
-      console.error('Supabase delete user failed:', err);
+    const { error } = await supabase.from('system_users').delete().eq('id', id);
+    if (error) {
+      console.error('Supabase delete user failed:', error);
+      throw error;
     }
-    const savedUsers = JSON.parse(localStorage.getItem('system_users') || '[]');
-    const updated = savedUsers.filter((u: UserProfile) => u.id !== id);
-    localStorage.setItem('system_users', JSON.stringify(updated));
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setLoginState(LoginState.LOGGED_OUT);
   };
 
   if (loginState === LoginState.LOGGED_OUT) {
     return <Login onLogin={handleLogin} error={error} />;
   }
-
   if (loginState === LoginState.NEED_PASSWORD_CHANGE) {
     return <PasswordChange onPasswordChange={handlePasswordChange} error={null} />;
   }
-
   if (currentUser && loginState === LoginState.LOGGED_IN) {
     return (
-      <Dashboard 
-        user={currentUser} 
-        onLogout={handleLogout} 
+      <Dashboard
+        user={currentUser}
+        onLogout={handleLogout}
         entries={entries}
         onAddEntry={addEntry}
+        onUpdateEntry={updateEntry}
         onDeleteEntry={deleteEntry}
         onRefreshData={fetchEntries}
         events={events}
@@ -269,6 +248,5 @@ export default function App() {
       />
     );
   }
-
   return null;
 }
