@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  BarChart3, 
-  Calendar, 
-  Users, 
-  PlusSquare, 
-  Settings, 
-  LogOut, 
+import {
+  BarChart3,
+  Calendar,
+  Users,
+  PlusSquare,
+  Settings,
+  LogOut,
   CalendarDays,
   Sparkles,
   Bell,
@@ -27,6 +27,7 @@ interface DashboardProps {
   onLogout: () => void;
   entries: VIPEntry[];
   onAddEntry: (entry: Omit<VIPEntry, 'id' | 'created_at'>) => Promise<void>;
+  onUpdateEntry: (id: string, entry: Omit<VIPEntry, 'id' | 'created_at'>) => Promise<void>;
   onDeleteEntry: (id: string) => Promise<void>;
   onRefreshData: () => Promise<void>;
   events: OutreachEvent[];
@@ -39,11 +40,12 @@ interface DashboardProps {
 
 type Tab = 'main' | 'list' | 'entry' | 'events' | 'admin';
 
-export default function Dashboard({ 
-  user, 
-  onLogout, 
-  entries, 
-  onAddEntry, 
+export default function Dashboard({
+  user,
+  onLogout,
+  entries,
+  onAddEntry,
+  onUpdateEntry,
   onDeleteEntry,
   onRefreshData,
   events,
@@ -59,6 +61,8 @@ export default function Dashboard({
   const [isWelcomePosterOpen, setIsWelcomePosterOpen] = useState(true);
 
   const isAdmin = user.role === 'admin';
+  // 대외선교부 소속이거나 관리자 권한인 경우 VIP 입력 가능
+  const canInputVIP = user.affiliation === '대외선교부' || isAdmin;
 
   useEffect(() => {
     const handleResize = () => {
@@ -76,14 +80,13 @@ export default function Dashboard({
   const navItems = [
     { id: 'main', label: '메인화면', icon: BarChart3 },
     { id: 'list', label: 'VIP 명단', icon: Users },
-    { id: 'entry', label: 'VIP 전도 입력', icon: PlusSquare },
+    ...(canInputVIP ? [{ id: 'entry', label: 'VIP 전도 입력', icon: PlusSquare }] : []),
     { id: 'events', label: '행사 목록', icon: CalendarDays },
     ...(isAdmin ? [{ id: 'admin', label: '시스템 관리', icon: Settings }] : []),
   ];
 
   return (
     <div className="flex h-screen bg-slate-50 text-blue-950 overflow-hidden font-sans relative">
-      {/* Sidebar Mobile Overlay */}
       <AnimatePresence>
         {isSidebarOpen && window.innerWidth <= 1024 && (
           <motion.div
@@ -99,7 +102,7 @@ export default function Dashboard({
       {/* Sidebar */}
       <motion.aside
         initial={false}
-        animate={{ 
+        animate={{
           width: isSidebarOpen ? 280 : (window.innerWidth <= 1024 ? 0 : 80),
           x: isSidebarOpen || window.innerWidth > 1024 ? 0 : -280
         }}
@@ -137,8 +140,8 @@ export default function Dashboard({
               }}
               className={cn(
                 "w-full flex items-center gap-3 p-3 rounded-xl transition-all group",
-                activeTab === item.id 
-                  ? "bg-blue-700 text-white shadow-lg shadow-blue-200" 
+                activeTab === item.id
+                  ? "bg-blue-700 text-white shadow-lg shadow-blue-200"
                   : "hover:bg-blue-50 text-blue-800/60 hover:text-blue-900"
               )}
             >
@@ -177,10 +180,9 @@ export default function Dashboard({
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
-        {/* Header */}
         <header className="h-16 lg:h-20 bg-white border-b border-blue-50 flex items-center justify-between px-4 lg:px-8 z-10 shrink-0 shadow-sm">
           <div className="flex items-center gap-2 lg:gap-4">
-            <button 
+            <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="p-2 hover:bg-blue-50 rounded-lg transition-colors lg:hidden text-blue-700"
             >
@@ -192,7 +194,7 @@ export default function Dashboard({
           </div>
 
           <div className="flex items-center gap-2 lg:gap-4">
-            <button 
+            <button
               onClick={() => setIsEventModalOpen(true)}
               className="flex items-center gap-2 px-3 lg:px-6 py-2.5 bg-blue-700 text-white rounded-full text-[10px] lg:text-xs font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-100"
             >
@@ -259,9 +261,14 @@ export default function Dashboard({
                 <StatsOverview entries={entries} upcomingEvents={upcomingEvents} />
               )}
               {activeTab === 'list' && (
-                <VIPList entries={entries} onDelete={onDeleteEntry} />
+                <VIPList
+                  entries={entries}
+                  onDelete={onDeleteEntry}
+                  onUpdate={onUpdateEntry}
+                  canEdit={canInputVIP}
+                />
               )}
-              {activeTab === 'entry' && (
+              {activeTab === 'entry' && canInputVIP && (
                 <VIPEntryForm onAddEntry={onAddEntry} onComplete={() => setActiveTab('main')} />
               )}
               {activeTab === 'events' && (
