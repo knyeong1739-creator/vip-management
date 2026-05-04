@@ -31,6 +31,7 @@ interface VIPListProps {
   onDelete: (id: string) => Promise<void>;
   onUpdate: (id: string, entry: Omit<VIPEntry, 'id' | 'created_at'>) => Promise<void>;
   canEdit: boolean;
+  canViewFull: boolean;
 }
 
 // 검색 대상 필드에서 쿼리가 매칭되는지 확인 + 매칭된 텍스트 하이라이트용 헬퍼
@@ -47,7 +48,7 @@ function highlight(text: string, query: string) {
   );
 }
 
-export default function VIPList({ entries, onDelete, onUpdate, canEdit }: VIPListProps) {
+export default function VIPList({ entries, onDelete, onUpdate, canEdit, canViewFull }: VIPListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [groupType, setGroupType] = useState<'yearly' | 'monthly' | 'category'>('yearly');
   const [filterValue, setFilterValue] = useState<string>('all');
@@ -395,21 +396,30 @@ export default function VIPList({ entries, onDelete, onUpdate, canEdit }: VIPLis
                   </span>
                 </div>
                 <div className="flex items-center gap-5 text-[11px] text-blue-900/40 font-black uppercase tracking-wide">
-                  <span className="flex items-center gap-2 bg-blue-50/30 px-2 py-0.5 rounded-md">
-                    <User size={14} className="text-blue-300" />
-                    {highlight(entry.affiliation, searchQuery)}
-                  </span>
-                  <span className="flex items-center gap-2 bg-blue-50/30 px-2 py-0.5 rounded-md shrink-0">
-                    <Briefcase size={14} className="text-blue-300" />
-                    {highlight(entry.category, searchQuery)}
-                  </span>
+                  {canViewFull ? (
+                    <>
+                      <span className="flex items-center gap-2 bg-blue-50/30 px-2 py-0.5 rounded-md">
+                        <User size={14} className="text-blue-300" />
+                        {highlight(entry.affiliation, searchQuery)}
+                      </span>
+                      <span className="flex items-center gap-2 bg-blue-50/30 px-2 py-0.5 rounded-md shrink-0">
+                        <Briefcase size={14} className="text-blue-300" />
+                        {highlight(entry.category, searchQuery)}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="flex items-center gap-2 bg-blue-50/30 px-2 py-0.5 rounded-md text-blue-200">
+                      이름·직책만 열람 가능합니다
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-xs font-black tracking-wider shadow-inner">
-                {highlight(entry.contact, searchQuery)}
-              </div>
-
+              {canViewFull && (
+                <div className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-xs font-black tracking-wider shadow-inner">
+                  {highlight(entry.contact, searchQuery)}
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 {canEdit && (
                   <>
@@ -444,17 +454,25 @@ export default function VIPList({ entries, onDelete, onUpdate, canEdit }: VIPLis
                   exit={{ height: 0, opacity: 0 }}
                 >
                   <div className="px-6 pb-8 pt-2 border-t border-blue-50 bg-blue-50/10">
-                    <div className="flex items-center gap-2 text-[10px] uppercase font-black tracking-[0.2em] text-blue-400 mb-6">
-                      <div className="w-1 h-3 bg-blue-300 rounded-full" /> Progress & Details
-                    </div>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap text-blue-950 font-bold bg-white p-8 rounded-2xl border border-blue-100 shadow-inner relative italic">
-                      <Sparkles size={24} className="absolute -top-3 -left-3 text-blue-100" />
-                      {highlight(entry.progress, searchQuery)}
-                    </p>
-                    <div className="mt-6 flex justify-end items-center gap-4">
-                      <span className="w-full h-[1px] bg-blue-50" />
-                      <span className="text-[10px] font-black text-blue-200 uppercase tracking-widest whitespace-nowrap">Registered: {new Date(entry.created_at).toLocaleString('ko-KR')}</span>
-                    </div>
+                    {canViewFull ? (
+                      <>
+                        <div className="flex items-center gap-2 text-[10px] uppercase font-black tracking-[0.2em] text-blue-400 mb-6">
+                          <div className="w-1 h-3 bg-blue-300 rounded-full" /> Progress & Details
+                        </div>
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap text-blue-950 font-bold bg-white p-8 rounded-2xl border border-blue-100 shadow-inner relative italic">
+                          <Sparkles size={24} className="absolute -top-3 -left-3 text-blue-100" />
+                          {highlight(entry.progress, searchQuery)}
+                        </p>
+                        <div className="mt-6 flex justify-end items-center gap-4">
+                          <span className="w-full h-[1px] bg-blue-50" />
+                          <span className="text-[10px] font-black text-blue-200 uppercase tracking-widest whitespace-nowrap">Registered: {new Date(entry.created_at).toLocaleString('ko-KR')}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="py-8 text-center text-blue-200 font-black text-sm uppercase tracking-widest">
+                        상세 정보 열람 권한이 없습니다
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
