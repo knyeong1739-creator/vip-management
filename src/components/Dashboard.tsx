@@ -61,8 +61,10 @@ export default function Dashboard({
   const [isWelcomePosterOpen, setIsWelcomePosterOpen] = useState(true);
 
   const isAdmin = user.role === 'admin';
-  // 대외선교부 소속이거나 관리자 권한인 경우 VIP 입력 가능
-  const canInputVIP = user.affiliation === '대외선교부' || isAdmin;
+  // VIP 입력: 대외선교부 전체 OR IUBA 경상대센터 관리자
+  const canInputVIP = user.affiliation === '대외선교부' || (user.affiliation === 'IUBA 경상대센터' && isAdmin);
+  // VIP 전체 열람: 대외선교부 관리자 OR IUBA 경상대센터 관리자
+  const canViewFullVIP = isAdmin;
 
   useEffect(() => {
     const handleResize = () => {
@@ -266,6 +268,7 @@ export default function Dashboard({
                   onDelete={onDeleteEntry}
                   onUpdate={onUpdateEntry}
                   canEdit={canInputVIP}
+                  canViewFull={canViewFullVIP}
                 />
               )}
               {activeTab === 'entry' && canInputVIP && (
