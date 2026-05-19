@@ -33,6 +33,16 @@ export interface OutreachEvent {
   poster_image?: string;
 }
 
+export type TaskStatus = 'todo' | 'inprogress' | 'done';
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  created_at: string;
+}
+
 export enum LoginState {
   LOGGED_OUT = 'LOGGED_OUT',
   LOGGED_IN = 'LOGGED_IN',
