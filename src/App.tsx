@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { VIPEntry, UserProfile, LoginState, OutreachEvent } from './types';
+import { VIPEntry, UserProfile, LoginState, OutreachEvent, Task } from './types';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import PasswordChange from './components/PasswordChange';
@@ -15,6 +15,7 @@ export default function App() {
   const [loginState, setLoginState] = useState<LoginState>(LoginState.LOGGED_OUT);
   const [entries, setEntries] = useState<VIPEntry[]>([]);
   const [events, setEvents] = useState<OutreachEvent[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export default function App() {
       await fetchUsers();
       await fetchEvents();
       await fetchEntries();
+      await fetchTasks();
     };
     initialize();
   }, []);
@@ -83,6 +85,19 @@ export default function App() {
       console.warn('Supabase fetch entries failed, using localStorage:', err);
       const saved = localStorage.getItem('vip_entries');
       if (saved) setEntries(JSON.parse(saved));
+    }
+  };
+
+  const fetchTasks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      if (data) setTasks(data as Task[]);
+    } catch (err) {
+      console.error('Supabase fetch tasks failed:', err);
     }
   };
 
@@ -218,6 +233,29 @@ export default function App() {
     }
   };
 
+  const addTask = async (taskData: Omit<Task, 'id' | 'created_at'>) => {
+    const newTask: Task = {
+      ...taskData,
+      id: Math.random().toString(36).substr(2, 9),
+      created_at: new Date().toISOString()
+    };
+    const { error } = await supabase.from('tasks').insert([newTask]);
+    if (error) { console.error(error); return; }
+    setTasks(prev => [...prev, newTask]);
+  };
+
+  const updateTaskStatus = async (id: string, status: Task['status']) => {
+    const { error } = await supabase.from('tasks').update({ status }).eq('id', id);
+    if (error) { console.error(error); return; }
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, status } : t));
+  };
+
+  const deleteTask = async (id: string) => {
+    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    if (error) { console.error(error); return; }
+    setTasks(prev => prev.filter(t => t.id !== id));
+  };
+
   const handleLogout = () => {
     setCurrentUser(null);
     setLoginState(LoginState.LOGGED_OUT);
@@ -245,6 +283,10 @@ export default function App() {
         onDeleteEvent={deleteEvent}
         onAddUser={addUser}
         onDeleteUser={deleteUser}
+        tasks={tasks}
+        onAddTask={addTask}
+        onUpdateTaskStatus={updateTaskStatus}
+        onDeleteTask={deleteTask}
       />
     );
   }
