@@ -1,223 +1,373 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, X, CheckCircle2, Circle, Loader2, ChevronRight } from 'lucide-react';
-import { Task, TaskStatus } from '../types';
-import { cn } from '../lib/utils';
+import {
+  BarChart3,
+  Calendar,
+  Users,
+  PlusSquare,
+  Settings,
+  LogOut,
+  CalendarDays,
+  Sparkles,
+  Bell,
+  Menu,
+  X,
+  ClipboardList
+} from 'lucide-react';
+import { cn, formatDate } from '../lib/utils';
+import { VIPEntry, UserProfile, OutreachEvent, Task } from '../types';
+import VIPEntryForm from './VIPEntryForm';
+import VIPList from './VIPList';
+import AdminPanel from './AdminPanel';
+import StatsOverview from './StatsOverview';
+import EventModal from './EventModal';
+import EventList from './EventList';
+import KanbanBoard from './KanbanBoard';
 
-interface KanbanBoardProps {
+interface DashboardProps {
+  user: UserProfile;
+  onLogout: () => void;
+  entries: VIPEntry[];
+  onAddEntry: (entry: Omit<VIPEntry, 'id' | 'created_at'>) => Promise<void>;
+  onUpdateEntry: (id: string, entry: Omit<VIPEntry, 'id' | 'created_at'>) => Promise<void>;
+  onDeleteEntry: (id: string) => Promise<void>;
+  onRefreshData: () => Promise<void>;
+  events: OutreachEvent[];
+  onAddEvent: (event: Omit<OutreachEvent, 'id' | 'created_at'>) => void;
+  onUpdateEvent: (event: OutreachEvent) => void;
+  onDeleteEvent: (id: string) => Promise<void>;
+  onAddUser: (user: Omit<UserProfile, 'id'>) => Promise<void>;
+  onDeleteUser: (id: string) => Promise<void>;
   tasks: Task[];
   onAddTask: (task: Omit<Task, 'id' | 'created_at'>) => Promise<void>;
-  onUpdateTaskStatus: (id: string, status: TaskStatus) => Promise<void>;
+  onUpdateTaskStatus: (id: string, status: Task['status']) => Promise<void>;
   onDeleteTask: (id: string) => Promise<void>;
-  isAdmin: boolean;
 }
 
-const columns: { id: TaskStatus; label: string; color: string; bg: string; border: string }[] = [
-  { id: 'todo', label: '할 일', color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200' },
-  { id: 'inprogress', label: '진행 중', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
-  { id: 'done', label: '완료', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-];
+type Tab = 'main' | 'list' | 'entry' | 'events' | 'tasks' | 'admin';
 
-export default function KanbanBoard({ tasks, onAddTask, onUpdateTaskStatus, onDeleteTask, isAdmin }: KanbanBoardProps) {
-  const [isAdding, setIsAdding] = useState(false);
-  const [addForm, setAddForm] = useState({ title: '', description: '' });
-  const [addLoading, setAddLoading] = useState(false);
+export default function Dashboard({
+  user,
+  onLogout,
+  entries,
+  onAddEntry,
+  onUpdateEntry,
+  onDeleteEntry,
+  onRefreshData,
+  events,
+  onAddEvent,
+  onUpdateEvent,
+  onDeleteEvent,
+  onAddUser,
+  onDeleteUser,
+  tasks,
+  onAddTask,
+  onUpdateTaskStatus,
+  onDeleteTask
+}: DashboardProps) {
+  const [activeTab, setActiveTab] = useState<Tab>('main');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [isWelcomePosterOpen, setIsWelcomePosterOpen] = useState(true);
 
-  const handleAdd = async () => {
-    if (!addForm.title.trim()) return;
-    setAddLoading(true);
-    try {
-      await onAddTask({ title: addForm.title, description: addForm.description, status: 'todo' });
-      setAddForm({ title: '', description: '' });
-      setIsAdding(false);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setAddLoading(false);
-    }
-  };
+  const isAdmin = user.role === 'admin';
+  const canInputVIP = user.affiliation === '대외선교부' || (user.affiliation === 'IUBA 경상대센터' && isAdmin);
+  const canViewFullVIP = isAdmin;
+  const canViewTasks = user.affiliation === '대외선교부' || isAdmin;
 
-  const getNextStatus = (current: TaskStatus): TaskStatus => {
-    if (current === 'todo') return 'inprogress';
-    if (current === 'inprogress') return 'done';
-    return 'todo';
-  };
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth <= 1024) setIsSidebarOpen(false);
+      else setIsSidebarOpen(true);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-  const getPrevStatus = (current: TaskStatus): TaskStatus => {
-    if (current === 'done') return 'inprogress';
-    if (current === 'inprogress') return 'todo';
-    return 'done';
-  };
+  const upcomingEvents = events
+    .filter(e => new Date(e.date) >= new Date(new Date().setHours(0, 0, 0, 0)))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const navItems = [
+    { id: 'main', label: '메인화면', icon: BarChart3 },
+    { id: 'list', label: 'VIP 명단', icon: Users },
+    ...(canInputVIP ? [{ id: 'entry', label: 'VIP 전도 입력', icon: PlusSquare }] : []),
+    { id: 'events', label: '행사 목록', icon: CalendarDays },
+    ...(canViewTasks ? [{ id: 'tasks', label: '할 일', icon: ClipboardList }] : []),
+    ...(isAdmin ? [{ id: 'admin', label: '시스템 관리', icon: Settings }] : []),
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-black text-2xl text-blue-950 uppercase tracking-tight">할 일 보드</h2>
-          <p className="text-[10px] uppercase tracking-widest text-blue-400 font-bold mt-1">Task Board · 대외선교부</p>
-        </div>
-        {isAdmin && (
-          <button
-            onClick={() => setIsAdding(true)}
-            className="flex items-center gap-2 px-5 py-3 bg-blue-700 text-white rounded-2xl font-black text-sm hover:bg-blue-800 transition-all shadow-lg shadow-blue-200"
-          >
-            <Plus size={18} /> 할 일 추가
-          </button>
-        )}
-      </div>
-
-      {/* Add Task Modal */}
+    <div className="flex h-screen bg-slate-50 text-blue-950 overflow-hidden font-sans relative">
       <AnimatePresence>
-        {isAdding && (
-          <div className="fixed inset-0 bg-blue-950/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl"
+        {isSidebarOpen && window.innerWidth <= 1024 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm z-30 lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar */}
+      <motion.aside
+        initial={false}
+        animate={{
+          width: isSidebarOpen ? 280 : (window.innerWidth <= 1024 ? 0 : 80),
+          x: isSidebarOpen || window.innerWidth > 1024 ? 0 : -280
+        }}
+        className={cn(
+          "bg-white border-r border-blue-100 flex flex-col shadow-lg z-40 h-full transition-all duration-300 ease-in-out",
+          window.innerWidth <= 1024 ? "fixed inset-y-0 left-0" : "relative"
+        )}
+      >
+        <div className="p-6 flex items-center justify-between border-b border-blue-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-700 rounded-lg flex items-center justify-center text-white shrink-0 shadow-md shadow-blue-200">
+              <Users size={24} />
+            </div>
+            {isSidebarOpen && (
+              <div className="overflow-hidden">
+                <h2 className="font-bold text-xl whitespace-nowrap text-blue-900">VIP 관리</h2>
+                <p className="text-[10px] uppercase tracking-widest text-blue-600/50 whitespace-nowrap font-bold">Outreach Dept.</p>
+              </div>
+            )}
+          </div>
+          {window.innerWidth <= 1024 && isSidebarOpen && (
+            <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-blue-50 rounded-lg">
+              <X size={20} className="text-blue-400" />
+            </button>
+          )}
+        </div>
+
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => {
+                setActiveTab(item.id as Tab);
+                if (window.innerWidth <= 1024) setIsSidebarOpen(false);
+              }}
+              className={cn(
+                "w-full flex items-center gap-3 p-3 rounded-xl transition-all group",
+                activeTab === item.id
+                  ? "bg-blue-700 text-white shadow-lg shadow-blue-200"
+                  : "hover:bg-blue-50 text-blue-800/60 hover:text-blue-900"
+              )}
             >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="font-black text-xl text-blue-950 uppercase tracking-tight">할 일 추가</h3>
-                <button onClick={() => setIsAdding(false)} className="p-2 hover:bg-blue-50 rounded-xl transition-all">
-                  <X size={20} className="text-blue-300" />
+              <item.icon size={20} className={cn(activeTab === item.id ? "text-white" : "text-blue-500")} />
+              {isSidebarOpen && (
+                <span className="font-bold text-sm tracking-tight">{item.label}</span>
+              )}
+              {activeTab === item.id && isSidebarOpen && (
+                <motion.div layoutId="active" className="ml-auto w-1.5 h-1.5 rounded-full bg-white" />
+              )}
+            </button>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-blue-50">
+          <div className="p-3 bg-blue-50/50 rounded-xl flex items-center gap-3 mb-3 border border-blue-100">
+            <div className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
+              {user.name.charAt(0)}
+            </div>
+            {isSidebarOpen && (
+              <div className="flex-1 overflow-hidden">
+                <p className="text-xs font-black text-blue-900 truncate">{user.name}</p>
+                <p className="text-[10px] text-blue-600/60 font-bold truncate">{user.affiliation}</p>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-red-50 text-red-500 transition-all font-bold text-sm group"
+          >
+            <LogOut size={20} className="group-hover:translate-x-1 transition-transform" />
+            {isSidebarOpen && <span>로그아웃</span>}
+          </button>
+        </div>
+      </motion.aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        <header className="h-16 lg:h-20 bg-white border-b border-blue-50 flex items-center justify-between px-4 lg:px-8 z-10 shrink-0 shadow-sm">
+          <div className="flex items-center gap-2 lg:gap-4">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 hover:bg-blue-50 rounded-lg transition-colors lg:hidden text-blue-700"
+            >
+              <Menu size={20} />
+            </button>
+            <h1 className="font-black text-xl lg:text-2xl tracking-tight truncate max-w-[150px] lg:max-w-none text-blue-950 uppercase">
+              {navItems.find(i => i.id === activeTab)?.label}
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-2 lg:gap-4">
+            <button
+              onClick={() => setIsEventModalOpen(true)}
+              className="flex items-center gap-2 px-3 lg:px-6 py-2.5 bg-blue-700 text-white rounded-full text-[10px] lg:text-xs font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-100"
+            >
+              <Sparkles size={12} /> <span className="hidden sm:inline">행사 일정 추가</span><span className="sm:hidden">추가</span>
+            </button>
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-[10px] font-bold border border-blue-100 whitespace-nowrap">
+              <CalendarDays size={12} /> {formatDate(new Date())}
+            </div>
+          </div>
+        </header>
+
+        {/* Notification Banner */}
+        <AnimatePresence>
+          {upcomingEvents.length > 0 && activeTab === 'main' && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="px-4 lg:px-8 pt-4 overflow-hidden"
+            >
+              <div className="bg-blue-900 text-white p-3 lg:p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-xl shadow-blue-200/50 gap-3 border border-blue-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 lg:w-10 lg:h-10 bg-blue-700/50 rounded-lg flex items-center justify-center animate-pulse shrink-0">
+                    <Bell size={16} className="text-white lg:w-5 lg:h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs lg:text-sm font-black flex items-center gap-2 uppercase tracking-wide">
+                      다가오는 주요 행사
+                      <span className="bg-red-500 text-[8px] px-1.5 py-0.5 rounded-full uppercase tracking-tighter shrink-0 font-black">Urgent</span>
+                    </h4>
+                    <p className="text-[10px] lg:text-xs text-blue-200 font-bold italic truncate max-w-[200px] lg:max-w-none">
+                      {upcomingEvents[0].title} • {upcomingEvents[0].date}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between w-full sm:w-auto gap-3 border-t sm:border-0 border-white/10 pt-2 sm:pt-0">
+                  <span className="text-[9px] lg:text-[10px] font-bold text-blue-300 italic">
+                    {upcomingEvents.length > 1 ? `+${upcomingEvents.length - 1} more` : 'Upcoming'}
+                  </span>
+                  <button
+                    onClick={() => setActiveTab('events')}
+                    className="px-4 py-2 bg-white text-blue-900 rounded-lg text-[10px] font-black hover:bg-blue-50 transition-all whitespace-nowrap shadow-md"
+                  >
+                    일정 확인
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto p-4 lg:p-8 relative">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="max-w-6xl mx-auto"
+            >
+              {activeTab === 'main' && (
+                <StatsOverview entries={entries} upcomingEvents={upcomingEvents} />
+              )}
+              {activeTab === 'list' && (
+                <VIPList
+                  entries={entries}
+                  onDelete={onDeleteEntry}
+                  onUpdate={onUpdateEntry}
+                  canEdit={canInputVIP}
+                  canViewFull={canViewFullVIP}
+                />
+              )}
+              {activeTab === 'entry' && canInputVIP && (
+                <VIPEntryForm onAddEntry={onAddEntry} onComplete={() => setActiveTab('main')} />
+              )}
+              {activeTab === 'events' && (
+                <EventList
+                  events={events}
+                  onAddEvent={onAddEvent}
+                  onUpdateEvent={onUpdateEvent}
+                  onDeleteEvent={onDeleteEvent}
+                />
+              )}
+              {activeTab === 'tasks' && canViewTasks && (
+                <KanbanBoard
+                  tasks={tasks}
+                  onAddTask={onAddTask}
+                  onUpdateTaskStatus={onUpdateTaskStatus}
+                  onDeleteTask={onDeleteTask}
+                  isAdmin={isAdmin}
+                />
+              )}
+              {activeTab === 'admin' && isAdmin && (
+                <AdminPanel onAddUser={onAddUser} onDeleteUser={onDeleteUser} />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/[0.05] rounded-full translate-y-1/2 -translate-x-1/2 pointer-events-none hidden lg:block" />
+      </main>
+
+      <EventModal
+        isOpen={isEventModalOpen}
+        onClose={() => setIsEventModalOpen(false)}
+        onAddEvent={onAddEvent}
+        onUpdateEvent={onUpdateEvent}
+      />
+
+      {/* 입장 시 포스터 팝업 */}
+      <AnimatePresence>
+        {isWelcomePosterOpen && upcomingEvents[0]?.poster_image && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsWelcomePosterOpen(false)}
+              className="absolute inset-0 bg-blue-950/70 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.85, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 30 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 200 }}
+              className="relative max-w-lg w-full bg-white rounded-3xl overflow-hidden shadow-2xl border border-blue-50"
+            >
+              <div className="p-5 flex items-center justify-between border-b border-blue-50">
+                <div>
+                  <p className="text-[9px] uppercase tracking-[0.3em] font-black text-blue-400 mb-1">다가오는 행사</p>
+                  <h3 className="font-black text-blue-950 text-sm uppercase tracking-tight">{upcomingEvents[0].title}</h3>
+                  <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mt-0.5">
+                    {upcomingEvents[0].date} · {upcomingEvents[0].location}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsWelcomePosterOpen(false)}
+                  className="p-2 hover:bg-blue-50 text-blue-300 hover:text-blue-700 rounded-xl transition-all"
+                >
+                  <X size={20} />
                 </button>
               </div>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-widest font-black text-blue-900/40">제목</label>
-                  <input
-                    type="text"
-                    autoFocus
-                    placeholder="할 일 제목"
-                    value={addForm.title}
-                    onChange={e => setAddForm({ ...addForm, title: e.target.value })}
-                    onKeyDown={e => e.key === 'Enter' && handleAdd()}
-                    className="w-full p-4 bg-blue-50/50 border border-blue-100 rounded-xl outline-none focus:border-blue-700 font-bold text-blue-900 placeholder:text-blue-200"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-widest font-black text-blue-900/40">설명 (선택)</label>
-                  <textarea
-                    placeholder="상세 내용을 입력하세요"
-                    value={addForm.description}
-                    onChange={e => setAddForm({ ...addForm, description: e.target.value })}
-                    className="w-full p-4 bg-blue-50/50 border border-blue-100 rounded-xl outline-none focus:border-blue-700 font-bold text-blue-900 placeholder:text-blue-200 min-h-[100px] resize-none"
-                  />
-                </div>
-                <div className="flex gap-3 mt-2">
-                  <button
-                    onClick={handleAdd}
-                    disabled={addLoading || !addForm.title.trim()}
-                    className="flex-1 p-4 bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-800 transition-all disabled:opacity-50"
-                  >
-                    {addLoading ? '추가 중...' : '추가하기'}
-                  </button>
-                  <button
-                    onClick={() => setIsAdding(false)}
-                    className="px-6 p-4 bg-blue-50 text-blue-700 rounded-2xl font-black hover:bg-blue-100 transition-all border border-blue-100"
-                  >
-                    취소
-                  </button>
-                </div>
+              <img
+                src={upcomingEvents[0].poster_image}
+                alt={upcomingEvents[0].title}
+                className="w-full max-h-[65vh] object-contain bg-blue-50/30"
+              />
+              <div className="p-4 flex justify-end border-t border-blue-50">
+                <button
+                  onClick={() => setIsWelcomePosterOpen(false)}
+                  className="px-6 py-2.5 bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-800 transition-all"
+                >
+                  확인
+                </button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
-      {/* Kanban Columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {columns.map(col => {
-          const colTasks = tasks.filter(t => t.status === col.id);
-          return (
-            <div key={col.id} className={cn('rounded-3xl border p-6 space-y-4 min-h-[400px]', col.bg, col.border)}>
-              {/* Column Header */}
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  {col.id === 'todo' && <Circle size={18} className={col.color} />}
-                  {col.id === 'inprogress' && <Loader2 size={18} className={cn(col.color, 'animate-spin')} />}
-                  {col.id === 'done' && <CheckCircle2 size={18} className={col.color} />}
-                  <h3 className={cn('font-black text-sm uppercase tracking-widest', col.color)}>{col.label}</h3>
-                </div>
-                <span className={cn('text-[10px] font-black px-2.5 py-1 rounded-full', col.color, 'bg-white/70 border', col.border)}>
-                  {colTasks.length}
-                </span>
-              </div>
-
-              {/* Tasks */}
-              <div className="space-y-3">
-                <AnimatePresence>
-                  {colTasks.map(task => (
-                    <motion.div
-                      key={task.id}
-                      layout
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      className="bg-white rounded-2xl p-5 shadow-sm border border-white/80 group hover:shadow-md transition-all"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className={cn(
-                            'font-black text-sm text-blue-950 leading-snug',
-                            task.status === 'done' && 'line-through text-blue-300'
-                          )}>
-                            {task.title}
-                          </p>
-                          {task.description && (
-                            <p className="text-[11px] text-blue-400 font-bold mt-2 leading-relaxed">
-                              {task.description}
-                            </p>
-                          )}
-                        </div>
-                        {isAdmin && (
-                          <button
-                            onClick={() => onDeleteTask(task.id)}
-                            className="p-1.5 text-blue-200 hover:text-red-400 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 shrink-0"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Status Move Buttons - 관리자만 */}
-                      {isAdmin && (
-                        <div className="flex gap-2 mt-4 pt-3 border-t border-blue-50">
-                          {task.status !== 'todo' && (
-                            <button
-                              onClick={() => onUpdateTaskStatus(task.id, getPrevStatus(task.status))}
-                              className="flex-1 py-2 text-[10px] font-black uppercase tracking-wide text-blue-400 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all border border-blue-100 flex items-center justify-center gap-1"
-                            >
-                              <ChevronRight size={12} className="rotate-180" />
-                              {task.status === 'inprogress' ? '할 일로' : '진행 중으로'}
-                            </button>
-                          )}
-                          {task.status !== 'done' && (
-                            <button
-                              onClick={() => onUpdateTaskStatus(task.id, getNextStatus(task.status))}
-                              className="flex-1 py-2 text-[10px] font-black uppercase tracking-wide text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded-xl transition-all border border-blue-200 flex items-center justify-center gap-1"
-                            >
-                              {task.status === 'todo' ? '진행 중으로' : '완료로'}
-                              <ChevronRight size={12} />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-
-                {colTasks.length === 0 && (
-                  <div className="py-12 text-center">
-                    <p className={cn('text-[10px] font-black uppercase tracking-widest', col.color, 'opacity-30')}>비어 있음</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
